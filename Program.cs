@@ -1,78 +1,45 @@
 // ============================================================
-// Assignment 05: Shopping Application with Different Discount Types
-//   - Prime loyalty discount
-//   - Festival / seasonal discount
-//   - Coupon code discount
-//   - Demonstrates Strategy pattern + polymorphism
+// Assignment 06: Exam Form Submission with Custom Exception
+//   - Throws custom exception if submitted after the deadline
 // ============================================================
 using System;
-using System.Collections.Generic;
 
-namespace ShoppingDiscounts
+namespace ExamFormSubmission
 {
-    public abstract class Discount
+    public class DeadlineExpiredException : Exception
     {
-        public string Name { get; }
-        protected Discount(string name) { Name = name; }
-        public abstract decimal Apply(decimal amount);
-    }
+        public DateTime Deadline { get; }
+        public DateTime SubmittedAt { get; }
 
-    // Prime loyalty: 10% off
-    public class PrimeLoyaltyDiscount : Discount
-    {
-        public PrimeLoyaltyDiscount() : base("Prime Loyalty (10%)") { }
-        public override decimal Apply(decimal amount) => amount * 0.90m;
-    }
-
-    // Festival seasonal: flat % off
-    public class FestivalDiscount : Discount
-    {
-        private readonly decimal _percent;
-        public FestivalDiscount(decimal percent) : base($"Festival ({percent}%)")
-        { _percent = percent; }
-        public override decimal Apply(decimal amount) =>
-            amount * (1m - _percent / 100m);
-    }
-
-    // Coupon code: fixed amount off (e.g. Rs. 250 off)
-    public class CouponDiscount : Discount
-    {
-        private readonly decimal _flatOff;
-        public CouponDiscount(string code, decimal flatOff)
-            : base($"Coupon '{code}' ({flatOff:C} off)")
-        { _flatOff = flatOff; }
-        public override decimal Apply(decimal amount) =>
-            Math.Max(0, amount - _flatOff);
-    }
-
-    // No discount
-    public class NoDiscount : Discount
-    {
-        public NoDiscount() : base("No Discount") { }
-        public override decimal Apply(decimal amount) => amount;
-    }
-
-    public class ShoppingCart
-    {
-        private readonly List<(string item, decimal price)> _items = new();
-        public decimal SubTotal { get; private set; }
-
-        public void Add(string item, decimal price)
+        public DeadlineExpiredException(DateTime deadline, DateTime submittedAt)
+            : base($"Exam form submission FAILED. Deadline was {deadline:dd-MM-yyyy HH:mm}, " +
+                   $"but submission attempted at {submittedAt:dd-MM-yyyy HH:mm}.")
         {
-            _items.Add((item, price));
-            SubTotal += price;
+            Deadline    = deadline;
+            SubmittedAt = submittedAt;
         }
+    }
 
-        public void Checkout(Discount discount)
+    public class ExamForm
+    {
+        public string  StudentName { get; }
+        public string  Subject     { get; }
+        public DateTime SubmittedAt { get; private set; }
+        public bool     IsSubmitted { get; private set; }
+
+        public ExamForm(string student, string subject)
+        { StudentName = student; Subject = subject; }
+
+        public void Submit(DateTime deadline)
         {
-            Console.WriteLine("-------- BILL --------");
-            foreach (var (item, price) in _items)
-                Console.WriteLine($"  {item,-15} {price,10:C}");
-            Console.WriteLine($"  {"Subtotal",-15} {SubTotal,10:C}");
-            Console.WriteLine($"  Applied: {discount.Name}");
-            decimal final = discount.Apply(SubTotal);
-            Console.WriteLine($"  {"Final Payable",-15} {final,10:C}");
-            Console.WriteLine($"  You saved: {SubTotal - final:C}\n");
+            DateTime now = DateTime.Now;
+            SubmittedAt = now;
+
+            if (now > deadline)
+                throw new DeadlineExpiredException(deadline, now);
+
+            IsSubmitted = true;
+            Console.WriteLine($"[OK] {StudentName}'s exam form for '{Subject}' submitted at {now:dd-MM-yyyy HH:mm}.");
         }
     }
 
@@ -80,35 +47,39 @@ namespace ShoppingDiscounts
     {
         static void Main()
         {
-            var cart = new ShoppingCart();
-            cart.Add("Laptop",   55000m);
-            cart.Add("Mouse",      500m);
-            cart.Add("Keyboard",  1500m);
-            cart.Add("Headset",   2000m);
+            // Case 1: Valid submission (deadline in the future)
+            var form1 = new ExamForm("Arjun", "Data Structures");
+            try
+            {
+                form1.Submit(DateTime.Now.AddDays(3));
+            }
+            catch (DeadlineExpiredException ex)
+            {
+                Console.WriteLine("ERROR: " + ex.Message);
+            }
 
-            // Try different discounts
-            cart.Checkout(new NoDiscount());
-            cart.Checkout(new PrimeLoyaltyDiscount());
-            cart.Checkout(new FestivalDiscount(15m));
-            cart.Checkout(new CouponDiscount("SAVE250", 250m));
+            // Case 2: Late submission (deadline already passed)
+            var form2 = new ExamForm("Neha", "Operating Systems");
+            try
+            {
+                form2.Submit(DateTime.Now.AddDays(-2));  // deadline 2 days ago
+            }
+            catch (DeadlineExpiredException ex)
+            {
+                Console.WriteLine("ERROR: " + ex.Message);
+                Console.WriteLine($"  Late by: {(ex.SubmittedAt - ex.Deadline).TotalHours:F1} hours");
+            }
 
-            // Composed: Prime + Festival combined (apply sequentially)
-            Console.WriteLine("----- Composed discount (Prime + Festival 5%) -----");
-            Discount composed = new ComposedDiscount(
-                new PrimeLoyaltyDiscount(),
-                new FestivalDiscount(5m));
-            cart.Checkout(composed);
+            // Case 3: Deadline is exactly now
+            var form3 = new ExamForm("Kabir", "DBMS");
+            try
+            {
+                form3.Submit(DateTime.Now.AddSeconds(-1)); // 1 sec ago
+            }
+            catch (DeadlineExpiredException ex)
+            {
+                Console.WriteLine("ERROR: " + ex.Message);
+            }
         }
-    }
-
-    // Helper: chain two discounts
-    public class ComposedDiscount : Discount
-    {
-        private readonly Discount _first, _second;
-        public ComposedDiscount(Discount first, Discount second)
-            : base($"{first.Name} + {second.Name}")
-        { _first = first; _second = second; }
-        public override decimal Apply(decimal amount) =>
-            _second.Apply(_first.Apply(amount));
     }
 }
